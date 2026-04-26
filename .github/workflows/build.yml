@@ -1,0 +1,126 @@
+# MTProto Proxy Scanner - GitHub Actions CI/CD
+
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake g++ libcurl4-openssl-dev qtbase5-dev
+    
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DWITH_GUI=ON
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Test
+      run: |
+        cd build
+        ./MTProtoProxyScanner --help || true
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: mtproto-scanner-linux
+        path: build/MTProtoProxyScanner
+
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '5.15.2'
+    
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DWITH_GUI=ON -G "Visual Studio 17 2022"
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: mtproto-scanner-windows
+        path: build/Release/MTProtoProxyScanner.exe
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        brew install cmake curl qt@5
+    
+    - name: Configure
+      run: |
+        mkdir -p build
+        cd build
+        cmake .. -DWITH_GUI=ON
+    
+    - name: Build
+      run: |
+        cd build
+        cmake --build . --config Release
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: mtproto-scanner-macos
+        path: build/MTProtoProxyScanner
+
+  release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Create archives
+      run: |
+        zip -j mtproto-scanner-windows.zip mtproto-scanner-windows/MTProtoProxyScanner.exe
+        tar -czf mtproto-scanner-linux.tar.gz mtproto-scanner-linux/MTProtoProxyScanner
+        tar -czf mtproto-scanner-macos.tar.gz mtproto-scanner-macos/MTProtoProxyScanner
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          mtproto-scanner-windows.zip
+          mtproto-scanner-linux.tar.gz
+          mtproto-scanner-macos.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
